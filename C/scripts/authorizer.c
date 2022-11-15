@@ -67,10 +67,10 @@ typedef struct
 
 typedef struct
 {
-    int condc; // number of conditions
-    int *condn; // number of attributes in each condition
+    int condc;   // number of conditions
+    int *condn;  // number of attributes in each condition
     int **conds; // conditions
-    int max; // max attribute
+    int max;     // max attribute
 } condition;
 
 pairing_t pairing;
@@ -165,10 +165,10 @@ secrets RequestAttributeSK()
 
 void Encrypt(cipher *ciphertexts, char *raw_m, condition *w, element_t **pk) //(*conds)[100]
 {
-    int condc = w -> condc;
-    int *condn = w -> condn;
-    int **conds = w -> conds;
-    printf("\nStarting Encyption\nMessage: ");
+    int condc = w->condc;
+    int *condn = w->condn;
+    int **conds = w->conds;
+    printf("\nStarting Encyption\n Message: ");
     char message_dec[2048], message[2048];
     mpz_t message_mpz;
     element_t message_ele;
@@ -180,24 +180,26 @@ void Encrypt(cipher *ciphertexts, char *raw_m, condition *w, element_t **pk) //(
     strcat(message, message_dec);
     strcat(message, ",0]");
     element_set_str(message_ele, message, 10);
-    element_printf("enc_m = %B\n", message_ele);
-    printf("W = ");
+    //element_printf(" enc_m = %B\n", message_ele);
+    printf(" W = ");
 
     for (int l = 0; l < condc; l++)
     {
         if (l != 0)
             printf(" or ");
         int auth = conds[l][0];
-        element_t *pkl = pk[conds[l][0]];
+        element_t pkl;
+        element_init_G1(pkl, pairing);
+        element_set(pkl, *pk[conds[l][0]]);
         printf("(%d", auth);
-        // element_printf("PK = %B\n", *pkl);
+        // element_printf("PK = %B\n", pkl);
         for (int m = 1; m < condn[l]; m++)
         {
             int auth = conds[l][m];
             element_t *curr_pk = pk[auth];
             printf(" and %d", auth);
             // element_printf("PK = %B\n", *curr_pk);
-            element_mul(*pkl, *pkl, *curr_pk);
+            element_mul(pkl, pkl, *curr_pk);
         }
         printf(")");
         element_t pair1, r, tmp;
@@ -210,7 +212,7 @@ void Encrypt(cipher *ciphertexts, char *raw_m, condition *w, element_t **pk) //(
         element_init_Zr(r, pairing);
 
         element_random(r);
-        element_pairing(pair1, Q, *pkl);
+        element_pairing(pair1, Q, pkl);
         element_pow_zn(pair1, pair1, r);
         element_mul(ciphertexts[l].c1, message_ele, pair1);
         element_pow_zn(ciphertexts[l].c2, P, r);
@@ -227,11 +229,14 @@ void Decrypt(char *dec_m, cipher ciphertext, int condn, int *cond, secrets *sk)
     mpz_t message_mpz;
     mpz_init(message_mpz);
     int auth = cond[0];
-    secrets sks = sk[auth];
-    printf("Auth = %d", auth);
-    // element_printf("SK1 = %B\n", sks.sk1);
-    // element_printf("SK2 = %B\n", sks.sk2);
-    // element_printf("SK3 = %B\n", sks.sk3);
+    secrets sks; // deep copy
+    element_init_G1(sks.sk1, pairing);
+    element_init_G1(sks.sk2, pairing);
+    element_init_G1(sks.sk3, pairing);
+    element_set(sks.sk1, sk[auth].sk1);
+    element_set(sks.sk2, sk[auth].sk2);
+    element_set(sks.sk3, sk[auth].sk3);
+    printf(" Auth = %d", auth);
     for (int m = 1; m < condn; m++)
     {
         int auth = cond[m];
@@ -260,12 +265,11 @@ void Decrypt(char *dec_m, cipher ciphertext, int condn, int *cond, secrets *sk)
     element_mul(m, ciphertext.c1, pair1);
     element_mul(m, m, pair2);
     element_div(m, m, pair3);
-    element_printf("dec_m = %B\n", m);
+    //element_printf(" dec_m = %B\n", m);
     element_to_mpz(message_mpz, m);
     valueToMessage(dec_m, message_mpz);
 
-    printf("Decrypt successfully.\nMessage: ");
-    puts(dec_m);
+    printf(" Message: %s\nFinished Decryption.\n", dec_m);
 }
 
 int main(int argc, char **argv)
@@ -279,17 +283,21 @@ int main(int argc, char **argv)
 
     // Encrypt (condition = 1 or (2 and 3))
     char raw_message[2048] = "hello world\0"; // message
-    int w1[1] = {1}; // 1
-    int w2[2] = {2, 3}; // 2 and 3
-    int w3[3] = {2, 4, 5}; // 2 and 4 and 5
+    int w1[1] = {1};                          // 1
+    int w2[2] = {2, 3};                       // 2 and 3
+    int w3[3] = {2, 4, 5};                    // 2 and 4 and 5
     condition w;
-    w.condc = 3; // number of conditions
+    w.condc = 3;                                    // number of conditions
     w.condn = (int *)malloc(sizeof(int) * w.condc); // number of attributes in each condition
-    w.condn[0] = 1; w.condn[1] = 2; w.condn[2] = 3;
+    w.condn[0] = 1;
+    w.condn[1] = 2;
+    w.condn[2] = 3;
     w.conds = malloc(sizeof(int *) * w.condc); // conditions
-    w.conds[0] = w1; w.conds[1] = w2; w.conds[2] = w3;
-    w.max = 5; // max attribute
-    auth aa[w.max + 1]; // set AA
+    w.conds[0] = w1;
+    w.conds[1] = w2;
+    w.conds[2] = w3;
+    w.max = 5;                 // max attribute
+    auth aa[w.max + 1];        // set AA
     element_t *pks[w.max + 1]; // attribute PK
     for (int k = 0; k < w.max + 1; k++)
     {
@@ -309,7 +317,8 @@ int main(int argc, char **argv)
     int cond1[1] = {1};
     int max = 1;
     secrets sk1[max + 1];
-    for(int i = 0; i < condc1; i++) sk1[user1_a[i]] = aa[user1_a[i]].sk;
+    for (int i = 0; i < condc1; i++)
+        sk1[user1_a[i]] = aa[user1_a[i]].sk;
     char dec_message1[2048];
     begin = clock();
     Decrypt(dec_message1, ct[0], condc1, cond1, sk1);
@@ -322,7 +331,8 @@ int main(int argc, char **argv)
     int cond2[2] = {2, 3};
     max = 3;
     secrets sk2[max + 1];
-    for(int i = 0; i < condc2; i++) sk2[user2_a[i]] = aa[user2_a[i]].sk;
+    for (int i = 0; i < condc2; i++)
+        sk2[user2_a[i]] = aa[user2_a[i]].sk;
     char dec_message2[2048];
     begin = clock();
     Decrypt(dec_message2, ct[1], condc2, cond2, sk2);
