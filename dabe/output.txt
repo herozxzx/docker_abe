@@ -1,0 +1,39 @@
+
+==============Starting Compile & Execute.==============
+[Compiling]
+g++ -o ../authorizer authorizer.o message_handle.o  -L ~/.local/lib -Wl,-rpath ~/.local/lib  -l pbc -lgmp -pthread
+
+[Executing]
+Starting Setup
+Finished Setup (time 12.034000[ms])
+
+Starting Encyption
+ Message = hello world!!
+ W = (0 and 2 and 6 and 10) or (0 and 2 and 6 and 11) or (0 and 2 and 7 and 10) or (0 and 2 and 7 and 11) or (0 and 3 and 6 and 10) or (0 and 3 and 6 and 11) or (0 and 3 and 7 and 10) or (0 and 3 and 7 and 11)
+Finished Encyption (time 44.335000[ms])
+
+Starting Decryption (Parallel)
+ Auth = 0 and 2 and 7 and 10
+ 8 threads started.
+ Message = hello world!!
+Finished Decryption (time 6.067000[ms])
+
+Starting Decryption (Parallel)
+ Auth = 1 and 2 and 7 and 10
+ 8 threads started.
+ Could not decrypt message.
+Finished Decryption (time 5.638000[ms])
+
+Starting Decryption (Parallel)
+ Auth = 0 and 3 and 7 and 11
+ 8 threads started.
+ Message = hello world!!
+Finished Decryption (time 5.997000[ms])
+
+Starting Decryption (Parallel)
+ Auth = 0 and 3 and 7 and 12
+ 8 threads started.
+ Could not decrypt message.
+Finished Decryption (time 5.788000[ms])
+=======================================================
+
