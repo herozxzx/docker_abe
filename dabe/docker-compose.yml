@@ -3,5 +3,5 @@ services:
   pbc:
     image: herozxzx/pbc:0.5.14
     volumes:
-      - ./:/usr/src/pbc
+      - ./:/pbc
     tty: true
