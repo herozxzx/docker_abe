@@ -4,14 +4,23 @@
 #include <math.h>
 #include <gmp.h>
 #include <string.h>
+#include <time.h>
 #include "message_handle.h"
+
+typedef struct
+{
+    char attr_name[100];
+    int attr_n;
+    int attr[1000];
+    char attr_child[1000][100];
+} AA;
 
 typedef struct
 {
     field_t Fq, Fq2, Eq;
     int exp2, exp1;
     int sign1;
-} * a_pairing_data_ptr;
+} *a_pairing_data_ptr;
 
 typedef struct
 {
@@ -30,7 +39,7 @@ typedef struct
     // representatives. Thus for a comparison, we must multiply by quotient_cmp
     // before comparing.
     mpz_ptr quotient_cmp;
-} * curve_data_ptr;
+} *curve_data_ptr;
 
 typedef struct
 {
@@ -56,6 +65,14 @@ typedef struct
     element_t c4;
 } cipher;
 
+typedef struct
+{
+    int condc; // number of conditions
+    int *condn; // number of attributes in each condition
+    int **conds; // conditions
+    int max; // max attribute
+} condition;
+
 pairing_t pairing;
 element_t P, Q, R, S;
 
@@ -64,7 +81,7 @@ void Setup(int argc, char **argv)
     printf("Setup Starting\n");
     pbc_demo_pairing_init(pairing, argc, argv);
     if (!pairing_is_symmetric(pairing))
-        pbc_die("pairing must be symmetric");
+        pbc_die("Error: pairing must be symmetric");
     element_init_G1(P, pairing);
     element_init_G1(Q, pairing);
     element_init_G1(R, pairing);
@@ -146,9 +163,12 @@ secrets RequestAttributeSK()
     return sk;
 }
 
-void Encrypt(cipher *ciphertexts, char *raw_m, int condc, int *condn, int (*conds)[100], element_t **pk)
+void Encrypt(cipher *ciphertexts, char *raw_m, condition *w, element_t **pk) //(*conds)[100]
 {
-    printf("\nStarting Encyption\n Message: ");
+    int condc = w -> condc;
+    int *condn = w -> condn;
+    int **conds = w -> conds;
+    printf("\nStarting Encyption\nMessage: ");
     char message_dec[2048], message[2048];
     mpz_t message_mpz;
     element_t message_ele;
@@ -161,22 +181,25 @@ void Encrypt(cipher *ciphertexts, char *raw_m, int condc, int *condn, int (*cond
     strcat(message, ",0]");
     element_set_str(message_ele, message, 10);
     element_printf("enc_m = %B\n", message_ele);
+    printf("W = ");
 
     for (int l = 0; l < condc; l++)
     {
+        if (l != 0)
+            printf(" or ");
         int auth = conds[l][0];
         element_t *pkl = pk[conds[l][0]];
-        printf("Auth = %d (%d, 0)\n", auth, l);
+        printf("(%d", auth);
         // element_printf("PK = %B\n", *pkl);
         for (int m = 1; m < condn[l]; m++)
         {
             int auth = conds[l][m];
             element_t *curr_pk = pk[auth];
-            printf("Auth = %d (%d, %d)\n", auth, l, m);
+            printf(" and %d", auth);
             // element_printf("PK = %B\n", *curr_pk);
             element_mul(*pkl, *pkl, *curr_pk);
         }
-        
+        printf(")");
         element_t pair1, r, tmp;
         element_init_GT(ciphertexts[l].c1, pairing);
         element_init_G1(ciphertexts[l].c2, pairing);
@@ -194,7 +217,7 @@ void Encrypt(cipher *ciphertexts, char *raw_m, int condc, int *condn, int (*cond
         element_pow_zn(ciphertexts[l].c3, R, r);
         element_pow_zn(ciphertexts[l].c4, S, r);
     }
-    printf("Finished Encyption\n");
+    printf("\nFinished Encyption\n");
 }
 
 void Decrypt(char *dec_m, cipher ciphertext, int condn, int *cond, secrets *sk)
@@ -205,19 +228,20 @@ void Decrypt(char *dec_m, cipher ciphertext, int condn, int *cond, secrets *sk)
     mpz_init(message_mpz);
     int auth = cond[0];
     secrets sks = sk[auth];
-    printf("Auth = %d (%d)\n", auth, 0);
+    printf("Auth = %d", auth);
     // element_printf("SK1 = %B\n", sks.sk1);
     // element_printf("SK2 = %B\n", sks.sk2);
     // element_printf("SK3 = %B\n", sks.sk3);
     for (int m = 1; m < condn; m++)
     {
         int auth = cond[m];
-        printf("Auth = %d (%d)\n", auth, m);
+        printf(" and %d", auth);
         // element_printf("SK = %B\n", sk[auth].sk1);
         element_mul(sks.sk1, sks.sk1, sk[auth].sk1);
         element_mul(sks.sk2, sks.sk2, sk[auth].sk2);
         element_mul(sks.sk3, sks.sk3, sk[auth].sk3);
-    }    
+    }
+    printf("\n");
     // element_printf("SK1 = %B\n", sks.sk1);
     // element_printf("SK2 = %B\n", sks.sk2);
     // element_printf("SK3 = %B\n", sks.sk3);
@@ -240,52 +264,79 @@ void Decrypt(char *dec_m, cipher ciphertext, int condn, int *cond, secrets *sk)
     element_to_mpz(message_mpz, m);
     valueToMessage(dec_m, message_mpz);
 
-    printf("Decrypt successfully. The message is:\n");
+    printf("Decrypt successfully.\nMessage: ");
     puts(dec_m);
 }
 
 int main(int argc, char **argv)
 {
+    // Setup
+    clock_t begin, end;
+    begin = clock();
     Setup(argc, argv);
-    auth aa1 = CreateAuthority(1);
-    auth aa2 = CreateAuthority(2);
-    auth aa3 = CreateAuthority(3);
+    end = clock();
+    printf("(time %lf [ms])\n", (difftime(end, begin) / CLOCKS_PER_SEC) * 1000.);
 
     // Encrypt (condition = 1 or (2 and 3))
-    char raw_message[2048] = "Test message\0";
-    int condc = 2;
-    int condn[2] = {1, 2};
-    int conds[2][100];
-    conds[0][0] = 1;
-    conds[1][0] = 2; conds[1][1] = 3;
-    int max = 3;
-    element_t *pk[max + 1];
-    for (int k = 0; k < max + 1; k++)
-        pk[k] = (element_t *)malloc(sizeof(element_t));
-    pk[1] = &aa1.pk; // attr 1
-    pk[2] = &aa2.pk; // attr 2
-    pk[3] = &aa3.pk; // attr 3
-    cipher ct[max + 1];
-    Encrypt(ct, raw_message, condc, condn, conds, pk);
+    char raw_message[2048] = "hello world\0"; // message
+    int w1[1] = {1}; // 1
+    int w2[2] = {2, 3}; // 2 and 3
+    int w3[3] = {2, 4, 5}; // 2 and 4 and 5
+    condition w;
+    w.condc = 3; // number of conditions
+    w.condn = (int *)malloc(sizeof(int) * w.condc); // number of attributes in each condition
+    w.condn[0] = 1; w.condn[1] = 2; w.condn[2] = 3;
+    w.conds = malloc(sizeof(int *) * w.condc); // conditions
+    w.conds[0] = w1; w.conds[1] = w2; w.conds[2] = w3;
+    w.max = 5; // max attribute
+    auth aa[w.max + 1]; // set AA
+    element_t *pks[w.max + 1]; // attribute PK
+    for (int k = 0; k < w.max + 1; k++)
+    {
+        aa[k] = CreateAuthority(k);
+        pks[k] = &aa[k].pk;
+    }
+    cipher ct[w.condc]; // ciphertext
+    begin = clock();
+    Encrypt(ct, raw_message, &w, pks);
+    end = clock();
+    printf("(time %lf [ms])\n", (difftime(end, begin) / CLOCKS_PER_SEC) * 1000.);
 
-    // Decrypt user (id = u1, auths = 1)
+    // Decrypt user(id = u1, auths = 1)
+    condition user1;
     int user1_a[1] = {1};
     int condc1 = 1;
     int cond1[1] = {1};
-    max = 1;
+    int max = 1;
     secrets sk1[max + 1];
-    sk1[user1_a[0]] = aa1.sk;
+    for(int i = 0; i < condc1; i++) sk1[user1_a[i]] = aa[user1_a[i]].sk;
     char dec_message1[2048];
+    begin = clock();
     Decrypt(dec_message1, ct[0], condc1, cond1, sk1);
+    end = clock();
+    printf("(time %lf [ms])\n", (difftime(end, begin) / CLOCKS_PER_SEC) * 1000.);
 
-    // Decrypt user (id = u2, auths = 2, 3)
+    // Decrypt user(id = u2, auths = 2 and 3)
     int user2_a[2] = {2, 3};
     int condc2 = 2;
     int cond2[2] = {2, 3};
     max = 3;
     secrets sk2[max + 1];
-    sk2[user2_a[0]] = aa2.sk;
-    sk2[user2_a[1]] = aa3.sk;
+    for(int i = 0; i < condc2; i++) sk2[user2_a[i]] = aa[user2_a[i]].sk;
     char dec_message2[2048];
+    begin = clock();
     Decrypt(dec_message2, ct[1], condc2, cond2, sk2);
+    end = clock();
+    printf("(time %lf [ms])\n", (difftime(end, begin) / CLOCKS_PER_SEC) * 1000.);
+
+    /* Decrypt user (id = u3, auths = 2)
+    int user3_a[1] = {2};
+    int condc3 = 1;
+    int cond3[1] = {2};
+    max = 2;
+    secrets sk3[max + 1];
+    sk3[user2_a[0]] = aa2.sk;
+    char dec_message3[2048];
+    Decrypt(dec_message3, ct[2], condc3, cond3, sk3);
+    */
 }
