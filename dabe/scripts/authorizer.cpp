@@ -362,7 +362,7 @@ int main(int argc, char **argv)
     for (int attr = 0; attr <= 13; attr++)
         aas.insert(make_pair(attr, CreateAuthority(attr)));
 
-    // Encrypt
+    // Encrypt (condition = 0 and (2 or 3) and (6 or 7) and (10 or 11))
     vector<int> w1 = {0, 2, 6, 10}; // 0 and 2 and 6 and 10
     vector<int> w2 = {0, 2, 6, 11}; // 0 and 2 and 6 and 11
     vector<int> w3 = {0, 2, 7, 10}; // 0 and 2 and 7 and 10
