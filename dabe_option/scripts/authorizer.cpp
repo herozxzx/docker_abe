@@ -47,11 +47,11 @@ typedef struct
 
 typedef struct
 {
-    int attr;
-    vector<int> users;
+    int attr_c;
     element_t hi;
     element_t pk;
     secrets sk;
+    vector<int> users;
 } auth;
 
 typedef struct
@@ -64,15 +64,52 @@ typedef struct
 
 typedef struct
 {
-    int condc;   // number of conditions
-    int *condn;  // number of attributes in each condition
-    int **conds; // conditions
-    int max;     // max attribute
-} condition;
+    element_t c1;
+    element_t c2;
+    element_t c3;
+    element_t c4;
+    vector<vector<element_t *>> c5;
+} cipher2;
 
 pairing_t pairing;
 element_t P, Q, R, S;
-vector<element_t> T;
+map<int, element_t *> T;
+map<int, int> attr_dict;
+int non_opt_w = 1;
+vector<int> non_opt_h{2};
+int opt_w = 3;
+vector<int> opt_h{10, 5, 10};
+
+void print_2d(vector<vector<int>> &list, int split)
+{   
+    int int_w = 2;
+    string sp(int_w, ' ');
+    string ind = "          ";
+    int h = list.size();
+    int w = list[0].size();
+    cout << ind;
+    for(int i = 0; i < w; i++)
+    {
+        if(i == split)
+            cout << " |";
+        cout << " [" << setw(int_w) << i << " ]";
+    }
+    cout << endl;
+    for(int i = 0; i < h; i++)
+    {
+        cout << ind;
+        for(int j = 0; j < w; j++)
+        {
+            if(j == split)
+                cout << "||";
+            if(list[i][j] == -1)
+                cout << "|  " << sp << " ";
+            else
+                cout << "|  " << setw(int_w) << list[i][j] << " ";
+        }
+        cout <<  "|" << endl;
+    }
+}
 
 void Setup(int argc, char **argv)
 {
@@ -100,6 +137,35 @@ void Setup(int argc, char **argv)
     element_pow_zn(R, P, q);
     element_pow_zn(S, P, q);
 
+    int attr_w, attr_h;
+    attr_w = non_opt_w + opt_w;
+    attr_h = max(*max_element(non_opt_h.begin(), non_opt_h.end()), *max_element(opt_h.begin(), opt_h.end()));
+    cout << attr_w << " " << attr_h << endl;
+    vector<vector<int>> attr_l(attr_h, vector<int>(attr_w, -1));
+    int attr_c = 0;
+    for(int i = 0; i < non_opt_w; i++){
+        for(int j = 0; j < non_opt_h[i]; j++){
+            attr_l[j][i] = attr_c;
+            attr_dict.insert(make_pair(attr_c, -1));
+            attr_c++; 
+        }
+    }
+    for(int i = 0; i < opt_w; i++){
+        for(int j = 0; j < opt_h[i]; j++){
+            element_t tmp_T, tmp_z;
+            element_init_G1(tmp_T, pairing);
+            element_init_Zr(tmp_z, pairing);
+            element_random(tmp_z);
+            element_pow_zn(tmp_T, tmp_T, tmp_z);
+            element_clear(tmp_z);
+            T.insert(make_pair(attr_c, &tmp_T));
+            attr_l[j][i + non_opt_w] = attr_c;
+            attr_dict.insert(make_pair(attr_c, i));
+            attr_c++;
+        }
+    }
+    cout << " Non-option | option attribute:" << endl;
+    print_2d(attr_l, non_opt_w);
     element_clear(q);
     element_clear(r);
     element_clear(s);
@@ -111,6 +177,7 @@ void Setup(int argc, char **argv)
 auth CreateAuthority(int i)
 {
     auth aa;
+    aa.attr_c = i;
     element_t x, y;
     element_init_Zr(x, pairing);
     element_init_Zr(y, pairing);
@@ -131,6 +198,14 @@ auth CreateAuthority(int i)
     // sk1
     element_pow_zn(tmp, R, y);
     element_mul(tmp, Q, tmp);
+    if (T.find(i) != T.end()) 
+    {
+        element_t tmp2;
+        element_init_G1(tmp2, pairing);
+        element_pow_zn(tmp2, *T[i], y);
+        element_mul(tmp, tmp2, tmp);
+        element_clear(tmp2);
+    }
     element_pow_zn(tmp, tmp, aa.hi);
     element_pow_zn(aa.sk.sk1, S, x);
     element_mul(aa.sk.sk1, tmp, aa.sk.sk1);
@@ -139,8 +214,6 @@ auth CreateAuthority(int i)
     // sk3
     element_pow_zn(aa.sk.sk3, P, y);
     element_pow_zn(aa.sk.sk3, aa.sk.sk3, aa.hi);
-
-    aa.attr = i;
 
     element_clear(x);
     element_clear(y);
@@ -185,8 +258,7 @@ bool Check_Message(vector<char[2048]> &dec_m_tmp, char *dec_m)
     }
     return res;
 }
-
-void Encrypt(vector<cipher> &ciphertexts, char *raw_m, vector<vector<int>> &w, map<int, element_t *> &pks)
+void Encrypt(vector<cipher2> &ciphertexts, char *raw_m, vector<int> &w, vector<int> &pks)
 {
     chrono::system_clock::time_point start, end;
     start = chrono::system_clock::now();
@@ -202,61 +274,55 @@ void Encrypt(vector<cipher> &ciphertexts, char *raw_m, vector<vector<int>> &w, m
     strcat(message, ",0]");
     element_set_str(message_ele, message, 10);
     // element_printf(" enc_m = %B\n", message_ele);
-    cout << " W = ";
-    int count1 = 0;
-    for (vector<int> &cond : w)
+
+    element_t pkl;
+    element_init_G1(pkl, pairing);
+    int count = 0;
+    string non_opt_out = "", opt_out = "";
+    for (int &attr_c : w)
     {
-        if (count1 != 0)
-            cout << " or ";
-        cout << "(";
-        element_t pkl;
-        element_init_G1(pkl, pairing);
-        int count2 = 0;
-        for (int &attr : cond)
-        {
-            if (count2 == 0)
-            {
-                cout << attr;
-                element_set(pkl, *pks[attr]);
-            }
-            else
-            {
-                cout << " and " << attr;
-                element_t *curr_pk = pks[attr];
-                element_mul(pkl, pkl, *curr_pk);
-            }
-            // element_printf("PK = %B\n", *curr_pk);
-            count2++;
+        element_t *curr_pk = pks[attr_c];
+        // element_printf("PK = %B\n", *curr_pk);
+        if (count == 0)
+            element_set(pkl, *curr_pk);
+        else
+            element_mul(pkl, pkl, *curr_pk);
+        if (attr_dict[attr_c] != -1){
+            non_opt_out += 
         }
-        cout << ")";
-        element_t pair1, r, tmp;
-        element_init_GT(ciphertexts[count1].c1, pairing);
-        element_init_G1(ciphertexts[count1].c2, pairing);
-        element_init_G1(ciphertexts[count1].c3, pairing);
-        element_init_G1(ciphertexts[count1].c4, pairing);
-        element_init_G1(tmp, pairing);
-        element_init_GT(pair1, pairing);
-        element_init_Zr(r, pairing);
-
-        element_random(r);
-        element_pairing(pair1, Q, pkl);
-        element_pow_zn(pair1, pair1, r);
-        element_mul(ciphertexts[count1].c1, message_ele, pair1);
-        element_pow_zn(ciphertexts[count1].c2, P, r);
-        element_pow_zn(ciphertexts[count1].c3, R, r);
-        element_pow_zn(ciphertexts[count1].c4, S, r);
-
-        element_clear(pkl);
-        element_clear(pair1);
-        element_clear(r);
-        element_clear(tmp);
-        count1++;
+        count++;
     }
+    cout << " W = ";
+    cout << ")";
+    element_t pair1, r, tmp;
+    element_init_GT(ciphertexts[count1].c1, pairing);
+    element_init_G1(ciphertexts[count1].c2, pairing);
+    element_init_G1(ciphertexts[count1].c3, pairing);
+    element_init_G1(ciphertexts[count1].c4, pairing);
+    element_init_G1(tmp, pairing);
+    element_init_GT(pair1, pairing);
+    element_init_Zr(r, pairing);
+
+    element_random(r);
+    element_pairing(pair1, Q, pkl);
+    element_pow_zn(pair1, pair1, r);
+    element_mul(ciphertexts[count1].c1, message_ele, pair1);
+    element_pow_zn(ciphertexts[count1].c2, P, r);
+    element_pow_zn(ciphertexts[count1].c3, R, r);
+    element_pow_zn(ciphertexts[count1].c4, S, r);
+
+    element_clear(pkl);
+    element_clear(pair1);
+    element_clear(r);
+    element_clear(tmp);
+    count1++;
+
     end = chrono::system_clock::now();
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
     printf("\nFinished Encyption (time %lf[ms])\n", time);
 }
 
+/*
 void Decrypt(cipher &ciphertext, char *dec_m, vector<int> &cond, map<int, secrets *> &sks, bool out)
 {
     chrono::system_clock::time_point start, end;
@@ -273,13 +339,13 @@ void Decrypt(cipher &ciphertext, char *dec_m, vector<int> &cond, map<int, secret
     element_init_G1(skl.sk2, pairing);
     element_init_G1(skl.sk3, pairing);
     int count = 0;
-    for (int &attr : cond)
+    for (int &attr_c : cond)
     {
         if (count == 0)
         {
             if (out)
-                cout << attr;
-            secrets *curr_sk = sks[attr]; // deep copy
+                cout << attr_c;
+            secrets *curr_sk = sks[attr_c]; // deep copy
             element_set(skl.sk1, curr_sk->sk1);
             element_set(skl.sk2, curr_sk->sk2);
             element_set(skl.sk3, curr_sk->sk3);
@@ -287,8 +353,8 @@ void Decrypt(cipher &ciphertext, char *dec_m, vector<int> &cond, map<int, secret
         else
         {
             if (out)
-                cout << " and " << attr;
-            secrets *curr_sk = sks[attr]; // shallow copy
+                cout << " and " << attr_c;
+            secrets *curr_sk = sks[attr_c]; // shallow copy
             element_mul(skl.sk1, skl.sk1, curr_sk->sk1);
             element_mul(skl.sk2, skl.sk2, curr_sk->sk2);
             element_mul(skl.sk3, skl.sk3, curr_sk->sk3);
@@ -364,6 +430,7 @@ void P_Decrypt(vector<cipher> &ciphertext, char *dec_m, vector<int> &cond, map<i
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
     printf("(time %lf[ms])\n", time);
 }
+*/
 
 int main(int argc, char **argv)
 {
@@ -374,9 +441,9 @@ int main(int argc, char **argv)
     //   | 5 | 9 | 13
     Setup(argc, argv);
     map<int, auth> aas;
-    for (int attr = 0; attr <= 13; attr++)
-        aas.insert(make_pair(attr, CreateAuthority(attr)));
-
+    for (int attr_c = 0; attr_c <= 13; attr_c++)
+        aas.insert(make_pair(attr_c, CreateAuthority(attr_c)));
+    /*
     // Encrypt (condition = 0 and (2 or 3) and (6 or 7) and (10 or 11))
     vector<int> w1 = {0, 2, 6, 10}; // 0 and 2 and 6 and 10
     vector<int> w2 = {0, 2, 6, 11}; // 0 and 2 and 6 and 11
@@ -394,33 +461,33 @@ int main(int argc, char **argv)
     char raw_message[2048];
     strcpy(raw_message, (head + message).c_str());
     for (vector<int> &cond : conds)
-        for (int &attr : cond)
-            if (pks.find(attr) == pks.end())
-                pks.insert(make_pair(attr, &aas[attr].pk));
+        for (int &attr_c : cond)
+            if (pks.find(attr_c) == pks.end())
+                pks.insert(make_pair(attr_c, &aas[attr_c].pk));
     Encrypt(ct, raw_message, conds, pks);
 
     // Decrypt user1(auths = 0 and 2 and 7 and 10)
     vector<int> user1_a = {0, 2, 7, 10};
     char dec_message1[2048];
     map<int, secrets *> sks;
-    for (int &attr : user1_a)
-        sks.insert(make_pair(attr, &aas[attr].sk));
+    for (int &attr_c : user1_a)
+        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
     P_Decrypt(ct, dec_message1, user1_a, sks);
 
     // Decrypt user2(auths = 1 and 2 and 7 and 10)
     vector<int> user2_a = {1, 2, 7, 10};
     char dec_message2[2048];
     sks.clear();
-    for (int &attr : user2_a)
-        sks.insert(make_pair(attr, &aas[attr].sk));
+    for (int &attr_c : user2_a)
+        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
     P_Decrypt(ct, dec_message2, user2_a, sks);
 
     // Decrypt user3(auths = 0 and 3 and 7 and 11)
     vector<int> user3_a = {0, 3, 7, 11};
     char dec_message3[2048];
     sks.clear();
-    for (int &attr : user3_a)
-        sks.insert(make_pair(attr, &aas[attr].sk));
+    for (int &attr_c : user3_a)
+        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
     P_Decrypt(ct, dec_message3, user3_a, sks);
     Decrypt(ct[7], dec_message3, user3_a, sks, true);
 
@@ -428,8 +495,9 @@ int main(int argc, char **argv)
     vector<int> user4_a = {0, 3, 7, 12};
     char dec_message4[2048];
     sks.clear();
-    for (int &attr : user4_a)
-        sks.insert(make_pair(attr, &aas[attr].sk));
+    for (int &attr_c : user4_a)
+        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
     P_Decrypt(ct, dec_message4, user4_a, sks);
     Decrypt(ct[7], dec_message4, user4_a, sks, true);
+    */
 }
