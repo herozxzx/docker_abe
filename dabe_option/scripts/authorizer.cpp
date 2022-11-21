@@ -84,10 +84,11 @@ typedef struct
 // Public information
 pairing_t pairing;
 element_t P, Q, R, S;
-map<int, element_t *> T;      // key = attribute child, value = T (G1)
-map<int, int> attr_dict;      // key = attribute child, value = attribute
-vector<int> non_opt_h{2};     // non-option attributes size (only one value)
+map<int, element_t *> T;    // key = attribute child, value = T (G1)
+map<int, int> attr_dict;    // key = attribute child, value = attribute
+vector<int> non_opt_h{2};   // non-option attributes size (only one value)
 vector<int> opt_h{4, 4, 4}; // option attributes size
+
 
 void print_2d(vector<vector<int>> &list, int split)
 {
@@ -117,6 +118,44 @@ void print_2d(vector<vector<int>> &list, int split)
                 cout << "|  " << setw(int_w) << list[i][j] << " ";
         }
         cout << "|" << endl;
+    }
+}
+
+bool Check_Message(vector<string> &dec_m_tmp, char *dec_m)
+{
+    bool res = false;
+    for (string &m : dec_m_tmp)
+    {
+        try
+        {
+            if (m.substr(0, 8) == "message:")
+            {
+                strcpy(dec_m, m.substr(8).c_str());
+                res = true;
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+    return res;
+}
+
+void mul_pair_dec(cipher2 &ciphertext, map<int, secrets *> &sks, element_t &m, vector<int> &cond_c, vector<int> &opt_attrs)
+{
+    int non_opt_w = non_opt_h.size();
+    for (int &attr_c : opt_attrs)
+    {
+        int x, y;
+        x = attr_dict[attr_c] - non_opt_w;
+        y = cond_c[x];
+        // cout << attr_c << " " << x << " " << y << endl;
+        // element_printf("%B\n", *ciphertext.c5[x][y]);
+        element_t pair_tmp;
+        element_init_GT(pair_tmp, pairing);
+        element_pairing(pair_tmp, *ciphertext.c5[x][y], sks[attr_c]->sk3);
+        element_mul(m, m, pair_tmp);
+        element_clear(pair_tmp);
     }
 }
 
@@ -301,28 +340,6 @@ auth2 CreateAuthority2(int i)
     return aa;
 }
 
-bool Check_Message(vector<char[2048]> &dec_m_tmp, char *dec_m)
-{
-    bool res = false;
-    for (char *m : dec_m_tmp)
-    {
-        try
-        {
-            string m_head(m, 8);
-            string m_str(m, 8, string(m).size() - 8);
-            if (m_head == "message:")
-            {
-                strcpy(dec_m, m_str.c_str());
-                res = true;
-            }
-        }
-        catch (...)
-        {
-        }
-    }
-    return res;
-}
-
 void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w1, vector<int> &w2, vector<element_t *> &pks)
 {
     int non_opt_w = non_opt_h.size();
@@ -407,7 +424,6 @@ void Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, vector<int> &c
         cout << "\nERROR(decrypt): invalid opt_attrs size" << endl;
         return;
     }
-    char message_dec[2048];
     mpz_t message_mpz;
     mpz_init(message_mpz);
     if (out)
@@ -456,19 +472,8 @@ void Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, vector<int> &c
     element_mul(m, ciphertext.c1, pair1);
     element_mul(m, m, pair2);
     element_div(m, m, pair3);
-    for (int &attr_c : opt_attrs)
-    {
-        int x, y;
-        x = attr_dict[attr_c] - non_opt_w;
-        y = cond_c[x];
-        // cout << attr_c << " " << x << " " << y << endl;
-        // element_printf("%B\n", *ciphertext.c5[x][y]);
-        element_t pair_tmp;
-        element_init_GT(pair_tmp, pairing);
-        element_pairing(pair_tmp, *ciphertext.c5[x][y], sks[attr_c]->sk3);
-        element_mul(m, m, pair_tmp);
-        element_clear(pair_tmp);
-    }
+    mul_pair_dec(ciphertext, sks, m, cond_c, opt_attrs);
+
     // if(out) element_printf(" dec_m = %B\n", m);
     element_to_mpz(message_mpz, m);
     valueToMessage(dec_m, message_mpz);
@@ -485,8 +490,7 @@ void Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, vector<int> &c
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
     if (out)
     {
-        vector<char[2048]> tmp_v(1);
-        strcpy(tmp_v[0], dec_m);
+        vector<string> tmp_v{string(dec_m)};
         if (Check_Message(tmp_v, dec_m))
             printf(" Message = %s\n", dec_m);
         else
@@ -494,27 +498,108 @@ void Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, vector<int> &c
         printf("Finished Decryption (time %lf[ms])\n", time);
     }
 }
-/*
+
 void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, secrets *> &sks)
 {
+    int non_opt_w = non_opt_h.size();
+    int opt_w = opt_h.size();
     cout << "\nStarting Decryption (Parallel)" << endl;
-    cout << " Auth = " << cond[0];
-    for (int i = 1; i < cond.size(); i++)
-        cout << " and " << cond[i];
-    cout << endl;
-
     chrono::system_clock::time_point start, end;
     start = chrono::system_clock::now();
-    const int thread_n = ciphertext.size();
-    vector<char[2048]> dec_m_tmp(thread_n);
-    vector<thread> threads;
-    bool res = false;
 
-    for (int i = 0; i < thread_n; ++i)
-        threads.push_back(thread(Decrypt, ref(ciphertext[i]), dec_m_tmp[i], ref(cond), ref(sks), false));
+    mpz_t message_mpz;
+    mpz_init(message_mpz);
+    cout << " Auth = ";
+    vector<int> opt_attrs;
+    secrets skl;
+    element_init_G1(skl.sk1, pairing);
+    element_init_G1(skl.sk2, pairing);
+    element_init_G1(skl.sk3, pairing);
+    int count = 0;
+    for (int &attr_c : cond)
+    {
+        if (non_opt_w <= attr_dict[attr_c])
+            opt_attrs.push_back(attr_c);
+        if (count == 0)
+        {
+            cout << attr_c;
+            secrets *curr_sk = sks[attr_c]; // deep copy
+            element_set(skl.sk1, curr_sk->sk1);
+            element_set(skl.sk2, curr_sk->sk2);
+            element_set(skl.sk3, curr_sk->sk3);
+        }
+        else
+        {
+            cout << " and " << attr_c;
+            secrets *curr_sk = sks[attr_c]; // shallow copy
+            element_mul(skl.sk1, skl.sk1, curr_sk->sk1);
+            element_mul(skl.sk2, skl.sk2, curr_sk->sk2);
+            element_mul(skl.sk3, skl.sk3, curr_sk->sk3);
+        }
+        count++;
+    }
+    cout << endl;
+    element_t pair1, pair2, pair3, m;
+    element_init_GT(pair1, pairing);
+    element_init_GT(pair2, pairing);
+    element_init_GT(pair3, pairing);
+    element_init_GT(m, pairing);
+
+    element_pairing(pair1, ciphertext.c3, skl.sk3);
+    element_pairing(pair2, ciphertext.c4, skl.sk2);
+    element_pairing(pair3, ciphertext.c2, skl.sk1);
+    element_mul(m, ciphertext.c1, pair1);
+    element_mul(m, m, pair2);
+    element_div(m, m, pair3);
+
+    int len = ciphertext.c5.size();
+    vector<int> ps(len, 0);
+    vector<vector<int>> c_indexs;
+    bool stop = true;
+    while (stop)
+    {
+        vector<int> c_index;
+        for (int i = 0; i < len; i++)
+            c_index.push_back(ps[i]);
+        c_indexs.push_back(c_index);
+        for (int i = 0; i < len; i++)
+        {
+            if (++ps[i] < ciphertext.c5[i].size())
+                break;
+            else
+            {
+                if (i >= len - 1)
+                    stop = false;
+                ps[i] = 0;
+            }
+        }
+    }
+    int thread_n = c_indexs.size();
+    vector<thread> threads;
+    vector<string> dec_m_tmp(thread_n);
+    element_t m_tmp[thread_n];
+    for (int i = 0; i < thread_n; i++)
+    {
+        element_init_GT(m_tmp[i], pairing);
+        element_set(m_tmp[i], m);
+        threads.push_back(thread(mul_pair_dec, ref(ciphertext), ref(sks), ref(m_tmp[i]), ref(c_indexs[i]), ref(opt_attrs)));
+    }
     cout << " " << threads.size() << " threads started." << endl;
-    for (thread &t : threads)
-        t.join();
+    for (int i = 0; i < thread_n; i++)
+    {
+        threads[i].join();
+        element_to_mpz(message_mpz, m_tmp[i]);
+        valueToMessage(dec_m, message_mpz);
+        element_clear(m_tmp[i]);
+        dec_m_tmp[i] = string(dec_m);
+    }
+    element_clear(skl.sk1);
+    element_clear(skl.sk2);
+    element_clear(skl.sk3);
+    element_clear(pair1);
+    element_clear(pair2);
+    element_clear(pair3);
+    element_clear(m);
     if (Check_Message(dec_m_tmp, dec_m))
         cout << " Message = " << dec_m << endl;
     else
@@ -524,7 +609,19 @@ void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, sec
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
     printf("(time %lf[ms])\n", time);
 }
-*/
+
+void Get_SKs(vector<int> &user, map<int, auth> &non_opt_aas, map<int, auth2> &opt_aas, map<int, secrets*> &sks)
+{
+    for (int &attr_c : user)
+    {
+        int attr = attr_dict[attr_c];
+        if (attr == 0)
+            sks.insert(make_pair(attr_c, &non_opt_aas[attr_c].sk));
+        else
+            sks.insert(make_pair(attr_c, opt_aas[attr].sks[attr_c]));
+    }
+}
+
 int main(int argc, char **argv)
 {
     // Setup
@@ -562,22 +659,35 @@ int main(int argc, char **argv)
         pks.push_back(&opt_aas[i].pk);
     Encrypt(ct, raw_message, w1, w2, pks);
 
-    // Decrypt
-    vector<int> user{0, 2, 6, 10};
+    // Decrypt user1
+    vector<int> user1{0, 2, 6, 10};
     char dec_message1[2048];
     map<int, secrets *> sks;
-    for (int &attr_c : user)
-    {
-        int attr = attr_dict[attr_c];
-        if (attr == 0)
-            sks.insert(make_pair(attr_c, &non_opt_aas[attr_c].sk));
-        else
-            sks.insert(make_pair(attr_c, opt_aas[attr].sks[attr_c]));
-    }
+    Get_SKs(user1, non_opt_aas, opt_aas, sks);
+    P_Decrypt(ct, dec_message1, user1, sks);
     vector<int> cc{0, 0, 0};
-    Decrypt(ct, dec_message1, user, cc, sks, true);
-    // P_Decrypt(ct, dec_message1, user, sks);
+    Decrypt(ct, dec_message1, user1, cc, sks, true);
 
+    // Decrypt user2
+    vector<int> user2{1, 2, 6, 10};
+    char dec_message2[2048];
+    sks.clear();
+    Get_SKs(user2, non_opt_aas, opt_aas, sks);
+    P_Decrypt(ct, dec_message2, user2, sks);
+    
+    // Decrypt user3
+    vector<int> user3{0, 3, 7, 11};
+    char dec_message3[2048];
+    sks.clear();
+    Get_SKs(user3, non_opt_aas, opt_aas, sks);
+    P_Decrypt(ct, dec_message3, user3, sks);
+    
+    // Decrypt user4
+    vector<int> user4{0, 3, 7, 12};
+    char dec_message4[2048];
+    sks.clear();
+    Get_SKs(user4, non_opt_aas, opt_aas, sks);
+    P_Decrypt(ct, dec_message4, user4, sks);
     /*
     for (auto it = non_opt_aas.begin(); it != non_opt_aas.end(); it++)
         cout << " " << it-> first;
@@ -587,41 +697,5 @@ int main(int argc, char **argv)
     cout << endl;
     for (int attr_c = 2; attr_c <= 26; attr_c++)
         element_printf("T %d %p %B\n", attr_c, T[attr_c], *T[attr_c]);
-    */
-
-    /*
-    // Decrypt user1(auths = 0 and 2 and 7 and 10)
-    vector<int> user1_a = {0, 2, 7, 10};
-    char dec_message1[2048];
-    map<int, secrets *> sks;
-    for (int &attr_c : user1_a)
-        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
-    P_Decrypt(ct, dec_message1, user1_a, sks);
-
-    // Decrypt user2(auths = 1 and 2 and 7 and 10)
-    vector<int> user2_a = {1, 2, 7, 10};
-    char dec_message2[2048];
-    sks.clear();
-    for (int &attr_c : user2_a)
-        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
-    P_Decrypt(ct, dec_message2, user2_a, sks);
-
-    // Decrypt user3(auths = 0 and 3 and 7 and 11)
-    vector<int> user3_a = {0, 3, 7, 11};
-    char dec_message3[2048];
-    sks.clear();
-    for (int &attr_c : user3_a)
-        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
-    P_Decrypt(ct, dec_message3, user3_a, sks);
-    Decrypt(ct[7], dec_message3, user3_a, sks, true);
-
-    // Decrypt user4(auths = 0 and 3 and 7 and 12)
-    vector<int> user4_a = {0, 3, 7, 12};
-    char dec_message4[2048];
-    sks.clear();
-    for (int &attr_c : user4_a)
-        sks.insert(make_pair(attr_c, &aas[attr_c].sk));
-    P_Decrypt(ct, dec_message4, user4_a, sks);
-    Decrypt(ct[7], dec_message4, user4_a, sks, true);
     */
 }
