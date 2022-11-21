@@ -4,6 +4,6 @@ services:
     #image: herozxzx/pbc:0.5.14
     image: pbc
     build: ./
-    volumes:
-      - ./:/pbc
+    #volumes:
+    #  - ./:/pbc
     tty: true
