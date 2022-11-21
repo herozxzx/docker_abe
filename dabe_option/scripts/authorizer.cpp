@@ -89,13 +89,12 @@ map<int, int> attr_dict;    // key = attribute child, value = attribute
 vector<int> non_opt_h{2};   // non-option attributes size (only one value)
 vector<int> opt_h{4, 4, 4}; // option attributes size
 
-
-void print_2d(vector<vector<int>> &list, int split)
+void print_2d(vector<vector<int>> &list, int split, int rows)
 {
     int int_w = 2;
     string sp(int_w, ' ');
     string ind = "          ";
-    int h = list.size();
+    int h = rows;
     int w = list[0].size();
     cout << ind;
     for (int i = 0; i < w; i++)
@@ -112,13 +111,103 @@ void print_2d(vector<vector<int>> &list, int split)
         {
             if (j == split)
                 cout << "||";
-            if (list[i][j] == -1)
+            if (list[i][j] == -1 || j >= list[i].size())
                 cout << "|  " << sp << " ";
             else
                 cout << "|  " << setw(int_w) << list[i][j] << " ";
         }
         cout << "|" << endl;
     }
+}
+
+int Get_cipher_size(cipher &ciphertext)
+{
+    int tmp, sum = 0;
+    element_t tmp1, tmp2;
+    element_init_GT(tmp1, pairing);
+    element_init_G1(tmp2, pairing);
+    element_set(tmp1, ciphertext.c1);
+    tmp = pairing_length_in_bytes_GT(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data1 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data1, tmp1);
+
+    element_set(tmp2, ciphertext.c2);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data2 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data2, tmp2);
+
+    element_set(tmp2, ciphertext.c3);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data3 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data3, tmp2);
+
+    element_set(tmp2, ciphertext.c4);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data4 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data4, tmp2);
+
+    element_clear(tmp1);
+    element_clear(tmp2);
+
+    return sum;
+}
+
+int Get_cipher2_size(cipher2 &ciphertext)
+{
+    int tmp, sum = 0;
+    element_t tmp1, tmp2;
+    element_init_GT(tmp1, pairing);
+    element_init_G1(tmp2, pairing);
+    element_set(tmp1, ciphertext.c1);
+    tmp = pairing_length_in_bytes_GT(pairing);
+    sum += tmp;
+    // unsigned char *data1 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data1, tmp1);
+
+    element_set(tmp2, ciphertext.c2);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data2 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data2, tmp2);
+
+    element_set(tmp2, ciphertext.c3);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data3 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data3, tmp2);
+
+    element_set(tmp2, ciphertext.c4);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data4 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data4, tmp2);
+    vector<unsigned char *> data5s;
+    for (vector<element_t *> &c5_l : ciphertext.c5)
+        for (element_t *c5 : c5_l)
+        {
+            tmp = pairing_length_in_bytes_compressed_G1(pairing);
+            ;
+            sum += tmp;
+            // unsigned char *data5 = (unsigned char*)pbc_malloc(tmp);
+            // element_to_bytes_compressed(data5, tmp2);
+            // data5s.push_back(data5);
+        }
+
+    element_clear(tmp1);
+    element_clear(tmp2);
+
+    return sum;
 }
 
 bool Check_Message(vector<string> &dec_m_tmp, char *dec_m)
@@ -224,8 +313,8 @@ void Setup(int argc, char **argv)
             attr_c++;
         }
     }
-    cout << " Non-option | option attribute:" << endl;
-    print_2d(attr_l, non_opt_w);
+    cout << " Attributes Non-option(0) | With option :" << endl;
+    print_2d(attr_l, non_opt_w, attr_l[0].size());
     end = chrono::system_clock::now();
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
     printf("Finished Setup (time %lf[ms])\n", time);
@@ -340,7 +429,7 @@ auth2 CreateAuthority2(int i)
     return aa;
 }
 
-void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w1, vector<int> &w2, vector<element_t *> &pks)
+void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w, vector<element_t *> &pks)
 {
     int non_opt_w = non_opt_h.size();
     int opt_w = opt_h.size();
@@ -365,7 +454,11 @@ void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w1, vector<int> &w2,
     element_init_Zr(r, pairing);
     element_random(r);
     int count = 0;
-    string non_opt_out = "", opt_out = "";
+    int attr_w, attr_h;
+    attr_w = non_opt_w + opt_w;
+    attr_h = max(*max_element(non_opt_h.begin(), non_opt_h.end()), *max_element(opt_h.begin(), opt_h.end()));
+    vector<vector<int>> attr_l(attr_h, vector<int>(attr_w, -1));
+    vector<int> max(attr_w, 0);
     for (element_t *curr_pk : pks)
     {
         if (count == 0)
@@ -374,18 +467,25 @@ void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w1, vector<int> &w2,
             element_mul(pkl, pkl, *curr_pk);
         count++;
     }
-    for (int &attr_c : w2)
+    for (int &attr_c : w)
     {
-        int opt_attr = attr_dict[attr_c] - non_opt_w;
-        // cout << attr_c << " " << opt_attr;
-        element_init_G1(tmp_rTs[attr_c], pairing);
-        element_set(tmp_rTs[attr_c], *T[attr_c]);
-        element_pow_zn(tmp_rTs[attr_c], tmp_rTs[attr_c], r);
-        // element_printf(" %B\n", tmp_rTs[attr_c]);
-        tmp_c5[opt_attr].push_back(&tmp_rTs[attr_c]);
+        // cout << max[attr_dict[attr_c]] << " " << attr_dict[attr_c] << " " << attr_c << endl;
+        attr_l[max[attr_dict[attr_c]]][attr_dict[attr_c]] = attr_c;
+        max[attr_dict[attr_c]]++;
+        if (attr_dict[attr_c] != 0)
+        {
+            int opt_attr = attr_dict[attr_c] - non_opt_w;
+            // cout << attr_c << " " << opt_attr;
+            element_init_G1(tmp_rTs[attr_c], pairing);
+            element_set(tmp_rTs[attr_c], *T[attr_c]);
+            element_pow_zn(tmp_rTs[attr_c], tmp_rTs[attr_c], r);
+            // element_printf(" %B\n", tmp_rTs[attr_c]);
+            tmp_c5[opt_attr].push_back(&tmp_rTs[attr_c]);
+        }
     }
 
-    cout << " W = " << endl;
+    cout << " W = [W0, W*]:" << endl;
+    print_2d(attr_l, non_opt_w, *max_element(max.begin(), max.end()));
     element_t pair1, tmp;
     element_init_GT(ciphertext.c1, pairing);
     element_init_G1(ciphertext.c2, pairing);
@@ -408,7 +508,7 @@ void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w1, vector<int> &w2,
 
     end = chrono::system_clock::now();
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
-    printf("\nFinished Encyption (time %lf[ms])\n", time);
+    printf("Finished Encyption (time %lf[ms])\n", time);
 }
 
 void Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, vector<int> &cond_c, map<int, secrets *> &sks, bool out)
@@ -610,7 +710,7 @@ void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, sec
     printf("(time %lf[ms])\n", time);
 }
 
-void Get_SKs(vector<int> &user, map<int, auth> &non_opt_aas, map<int, auth2> &opt_aas, map<int, secrets*> &sks)
+void Get_SKs(vector<int> &user, map<int, auth> &non_opt_aas, map<int, auth2> &opt_aas, map<int, secrets *> &sks)
 {
     for (int &attr_c : user)
     {
@@ -645,19 +745,19 @@ int main(int argc, char **argv)
     }
 
     // Encrypt
-    cipher2 ct;
-    vector<int> w1{0};
-    vector<int> w2{2, 3, 6, 7, 10, 11};
-    vector<element_t *> pks;
-    string message("hello world!!"); // message
+    cipher2 ct;                           // ciphertext
+    vector<element_t *> pks;              // PKs
+    vector<int> w{0, 2, 3, 6, 7, 10, 11}; // condition
+    string message("hello world!!");      // message
     string head("message:");
     char raw_message[2048];
     strcpy(raw_message, (head + message).c_str());
-    for (int &attr_c : w1)
-        pks.push_back(&non_opt_aas[attr_c].pk);
+    for (int &attr_c : w)
+        if (attr_dict[attr_c] == 0)
+            pks.push_back(&non_opt_aas[attr_c].pk);
     for (int i = non_opt_h.size(); i < opt_h.size() + non_opt_h.size(); i++)
         pks.push_back(&opt_aas[i].pk);
-    Encrypt(ct, raw_message, w1, w2, pks);
+    Encrypt(ct, raw_message, w, pks);
 
     // Decrypt user1
     vector<int> user1{0, 2, 6, 10};
@@ -674,21 +774,25 @@ int main(int argc, char **argv)
     sks.clear();
     Get_SKs(user2, non_opt_aas, opt_aas, sks);
     P_Decrypt(ct, dec_message2, user2, sks);
-    
+
     // Decrypt user3
     vector<int> user3{0, 3, 7, 11};
     char dec_message3[2048];
     sks.clear();
     Get_SKs(user3, non_opt_aas, opt_aas, sks);
     P_Decrypt(ct, dec_message3, user3, sks);
-    
+
     // Decrypt user4
     vector<int> user4{0, 3, 7, 12};
     char dec_message4[2048];
     sks.clear();
     Get_SKs(user4, non_opt_aas, opt_aas, sks);
     P_Decrypt(ct, dec_message4, user4, sks);
+
+    cout << "\nCipher text size = " << Get_cipher2_size(ct) << " bytes" << endl;
+    cout << "(G1 points are compressed)" << endl;
     /*
+    // debug
     for (auto it = non_opt_aas.begin(); it != non_opt_aas.end(); it++)
         cout << " " << it-> first;
     cout << endl;
