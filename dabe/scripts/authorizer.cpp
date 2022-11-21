@@ -399,16 +399,17 @@ int main(int argc, char **argv)
                 pks.insert(make_pair(attr, &aas[attr].pk));
     Encrypt(ct, raw_message, conds, pks);
 
-    // Decrypt user1(auths = 0 and 2 and 7 and 10)
-    vector<int> user1_a = {0, 2, 7, 10};
+    // Decrypt user1(auths = 0 and 2 and 6 and 10)
+    vector<int> user1_a = {0, 2, 6, 10};
     char dec_message1[2048];
     map<int, secrets *> sks;
     for (int &attr : user1_a)
         sks.insert(make_pair(attr, &aas[attr].sk));
     P_Decrypt(ct, dec_message1, user1_a, sks);
+    Decrypt(ct[0], dec_message1, user1_a, sks, true);
 
-    // Decrypt user2(auths = 1 and 2 and 7 and 10)
-    vector<int> user2_a = {1, 2, 7, 10};
+    // Decrypt user2(auths = 1 and 2 and 6 and 10)
+    vector<int> user2_a = {1, 2, 6, 10};
     char dec_message2[2048];
     sks.clear();
     for (int &attr : user2_a)
@@ -422,7 +423,6 @@ int main(int argc, char **argv)
     for (int &attr : user3_a)
         sks.insert(make_pair(attr, &aas[attr].sk));
     P_Decrypt(ct, dec_message3, user3_a, sks);
-    Decrypt(ct[7], dec_message3, user3_a, sks, true);
 
     // Decrypt user4(auths = 0 and 3 and 7 and 12)
     vector<int> user4_a = {0, 3, 7, 12};
@@ -431,5 +431,4 @@ int main(int argc, char **argv)
     for (int &attr : user4_a)
         sks.insert(make_pair(attr, &aas[attr].sk));
     P_Decrypt(ct, dec_message4, user4_a, sks);
-    Decrypt(ct[7], dec_message4, user4_a, sks, true);
 }
