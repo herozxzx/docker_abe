@@ -1,5 +1,5 @@
 FROM herozxzx/pbc:0.5.14
 
+COPY ./ /pbc
 WORKDIR /pbc
-
-CMD ["./exec.sh", "&>", "outputd.txt"]
+RUN chmod +wrx *.sh
