@@ -1,7 +1,9 @@
 version: '3'
 services:
   pbc:
-    image: herozxzx/pbc:0.5.14
+    #image: herozxzx/pbc:0.5.14
+    image: pbc
+    build: ./
     volumes:
       - ./:/pbc
     tty: true
