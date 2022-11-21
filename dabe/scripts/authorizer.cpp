@@ -72,13 +72,58 @@ typedef struct
 
 pairing_t pairing;
 element_t P, Q, R, S;
-vector<element_t> T;
+int attr_nums = 13;
+
+int Get_cipher_size(cipher &ciphertext)
+{
+    int tmp, sum = 0;
+    element_t tmp1, tmp2;
+    element_init_GT(tmp1, pairing);
+    element_init_G1(tmp2, pairing);
+    element_set(tmp1, ciphertext.c1);
+    tmp = pairing_length_in_bytes_GT(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data1 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data1, tmp1);
+
+    element_set(tmp2, ciphertext.c2);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data2 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data2, tmp2);
+
+    element_set(tmp2, ciphertext.c3);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data3 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data3, tmp2);
+
+    element_set(tmp2, ciphertext.c4);
+    tmp = pairing_length_in_bytes_compressed_G1(pairing);
+    ;
+    sum += tmp;
+    // unsigned char *data4 = (unsigned char*)pbc_malloc(tmp);
+    // element_to_bytes_compressed(data4, tmp2);
+
+    element_clear(tmp1);
+    element_clear(tmp2);
+
+    return sum;
+}
 
 void Setup(int argc, char **argv)
 {
     chrono::system_clock::time_point start, end;
     start = chrono::system_clock::now();
     cout << "Starting Setup" << endl;
+    cout << "Attributes =";
+    for (int attr = 0; attr <= attr_nums; attr++)
+        cout << " " << attr;
+    cout << endl;
+
     pbc_demo_pairing_init(pairing, argc, argv);
     if (!pairing_is_symmetric(pairing))
         pbc_die(" Error: pairing must be symmetric");
@@ -148,22 +193,7 @@ auth CreateAuthority(int i)
 
     return aa;
 }
-/*
-element_t *RequestAttributePK()
-{
-    element_t tmp;
 
-    element_t *pk = &tmp;
-    return pk;
-}
-
-secrets RequestAttributeSK()
-{
-    secrets sk;
-
-    return sk;
-}
-*/
 bool Check_Message(vector<char[2048]> &dec_m_tmp, char *dec_m)
 {
     bool res = false;
@@ -374,7 +404,7 @@ int main(int argc, char **argv)
     //   | 5 | 9 | 13
     Setup(argc, argv);
     map<int, auth> aas;
-    for (int attr = 0; attr <= 13; attr++)
+    for (int attr = 0; attr <= attr_nums; attr++)
         aas.insert(make_pair(attr, CreateAuthority(attr)));
 
     // Encrypt (condition = 0 and (2 or 3) and (6 or 7) and (10 or 11))
@@ -431,4 +461,12 @@ int main(int argc, char **argv)
     for (int &attr : user4_a)
         sks.insert(make_pair(attr, &aas[attr].sk));
     P_Decrypt(ct, dec_message4, user4_a, sks);
+
+    // Get ciphertext size
+    cout << "\nCipher text size = ";
+    int ct_size = 0;
+    for (cipher &tmp_ct : ct)
+        ct_size += Get_cipher_size(tmp_ct);
+    cout << ct_size << " bytes" << endl;
+    cout << "(G1 points are compressed)" << endl;
 }
