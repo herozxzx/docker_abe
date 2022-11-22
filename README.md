@@ -9,7 +9,7 @@ ABE based on pbc library.
 // Using docker \
 docker image build -t docker_abe . \
 // ex) Execute exec.sh \
-docker run --rm docker_abe /pbc/exec.sh
+docker run --rm docker_abe /pbc/exec.sh > output.txt
 
 // Using docker-compose \
 docker-compose up -d --build \
