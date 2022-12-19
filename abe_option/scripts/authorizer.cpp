@@ -478,16 +478,6 @@ void P_Decrypt(cipher &ciphertext, char *dec_m, vector<int> &attrs, secrets &sk)
         count++;
     }
     cout << endl;
-    
-    element_t pair1, pair2, pair3, m;
-    element_init_GT(pair1, pairing);
-    element_init_GT(pair2, pairing);
-    element_init_GT(m, pairing);
-
-    element_pairing(pair1, ciphertext.c3, sk.sk2);
-    element_pairing(pair2, ciphertext.c2, sk.sk1);
-    element_mul(m, ciphertext.c1, pair1);
-    element_div(m, m, pair2);
 
     int len = ciphertext.c4.size();
     vector<int> ps(len, 0);
@@ -518,13 +508,25 @@ void P_Decrypt(cipher &ciphertext, char *dec_m, vector<int> &attrs, secrets &sk)
     for (int i = 0; i < thread_n; i++)
     {
         element_init_GT(m_tmp[i], pairing);
-        element_set(m_tmp[i], m);
+        element_set1(m_tmp[i]);
         threads.push_back(thread(mul_pair_dec, ref(ciphertext), ref(sk), ref(m_tmp[i]), ref(c_indexs[i]), ref(opt_attrs)));
     }
     cout << " " << threads.size() << " threads started." << endl;
+    
+    element_t pair1, pair2, pair3, m;
+    element_init_GT(pair1, pairing);
+    element_init_GT(pair2, pairing);
+    element_init_GT(m, pairing);
+
+    element_pairing(pair1, ciphertext.c3, sk.sk2);
+    element_pairing(pair2, ciphertext.c2, sk.sk1);
+    element_mul(m, ciphertext.c1, pair1);
+    element_div(m, m, pair2);
+
     for (int i = 0; i < thread_n; i++)
     {
         threads[i].join();
+        element_mul(m_tmp[i], m_tmp[i], m);
         element_to_mpz(message_mpz, m_tmp[i]);
         valueToMessage(dec_m, message_mpz);
         element_clear(m_tmp[i]);
