@@ -169,29 +169,26 @@ int Get_cipher2_size(cipher2 &ciphertext)
     element_set(tmp1, ciphertext.c1);
     tmp = pairing_length_in_bytes_GT(pairing);
     sum += tmp;
-    // unsigned char *data1 = (unsigned char*)pbc_malloc(tmp);
-    // element_to_bytes_compressed(data1, tmp1);
+    unsigned char *data1 = (unsigned char*)pbc_malloc(tmp);
+    element_to_bytes(data1, tmp1);
 
     element_set(tmp2, ciphertext.c2);
     tmp = pairing_length_in_bytes_compressed_G1(pairing);
-    ;
     sum += tmp;
-    // unsigned char *data2 = (unsigned char*)pbc_malloc(tmp);
-    // element_to_bytes_compressed(data2, tmp2);
+    unsigned char *data2 = (unsigned char*)pbc_malloc(tmp);
+    element_to_bytes_compressed(data2, tmp2);
 
     element_set(tmp2, ciphertext.c3);
     tmp = pairing_length_in_bytes_compressed_G1(pairing);
-    ;
     sum += tmp;
-    // unsigned char *data3 = (unsigned char*)pbc_malloc(tmp);
-    // element_to_bytes_compressed(data3, tmp2);
+    unsigned char *data3 = (unsigned char*)pbc_malloc(tmp);
+    element_to_bytes_compressed(data3, tmp2);
 
     element_set(tmp2, ciphertext.c4);
     tmp = pairing_length_in_bytes_compressed_G1(pairing);
-    ;
     sum += tmp;
-    // unsigned char *data4 = (unsigned char*)pbc_malloc(tmp);
-    // element_to_bytes_compressed(data4, tmp2);
+    unsigned char *data4 = (unsigned char*)pbc_malloc(tmp);
+    element_to_bytes_compressed(data4, tmp2);
     vector<unsigned char *> data5s;
     for (vector<element_t *> &c5_l : ciphertext.c5)
         for (element_t *c5 : c5_l)
@@ -199,9 +196,9 @@ int Get_cipher2_size(cipher2 &ciphertext)
             tmp = pairing_length_in_bytes_compressed_G1(pairing);
             ;
             sum += tmp;
-            // unsigned char *data5 = (unsigned char*)pbc_malloc(tmp);
-            // element_to_bytes_compressed(data5, tmp2);
-            // data5s.push_back(data5);
+            unsigned char *data5 = (unsigned char*)pbc_malloc(tmp);
+            element_to_bytes_compressed(data5, tmp2);
+            data5s.push_back(data5);
         }
 
     element_clear(tmp1);
@@ -313,7 +310,7 @@ void Setup(int argc, char **argv)
             attr_c++;
         }
     }
-    cout << " Attributes Non-option(0) | With option :" << endl;
+    cout << " Non-option(0) | Option attributes :" << endl;
     print_2d(attr_l, non_opt_w, attr_l[0].size());
     end = chrono::system_clock::now();
     double time = static_cast<double>(chrono::duration_cast<chrono::microseconds>(end - start).count() / 1000.0);
@@ -484,7 +481,7 @@ void Encrypt(cipher2 &ciphertext, char *raw_m, vector<int> &w, vector<element_t 
         }
     }
 
-    cout << " W = [W0, W*]:" << endl;
+    cout << " Non-option(0) | Option attributes (W):" << endl;
     print_2d(attr_l, non_opt_w, *max_element(max.begin(), max.end()));
     element_t pair1, tmp;
     element_init_GT(ciphertext.c1, pairing);
@@ -605,7 +602,7 @@ void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, sec
     int opt_w = opt_h.size();
     cout << "\nStarting Decryption (Parallel)" << endl;
     chrono::system_clock::time_point start, end;
-    start = chrono::system_clock::now();
+    start = chrono::system_clock::now();    
 
     mpz_t message_mpz;
     mpz_init(message_mpz);
@@ -639,18 +636,6 @@ void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, sec
         count++;
     }
     cout << endl;
-    element_t pair1, pair2, pair3, m;
-    element_init_GT(pair1, pairing);
-    element_init_GT(pair2, pairing);
-    element_init_GT(pair3, pairing);
-    element_init_GT(m, pairing);
-
-    element_pairing(pair1, ciphertext.c3, skl.sk3);
-    element_pairing(pair2, ciphertext.c4, skl.sk2);
-    element_pairing(pair3, ciphertext.c2, skl.sk1);
-    element_mul(m, ciphertext.c1, pair1);
-    element_mul(m, m, pair2);
-    element_div(m, m, pair3);
 
     int len = ciphertext.c5.size();
     vector<int> ps(len, 0);
@@ -681,13 +666,28 @@ void P_Decrypt(cipher2 &ciphertext, char *dec_m, vector<int> &cond, map<int, sec
     for (int i = 0; i < thread_n; i++)
     {
         element_init_GT(m_tmp[i], pairing);
-        element_set(m_tmp[i], m);
+        element_set1(m_tmp[i]);
         threads.push_back(thread(mul_pair_dec, ref(ciphertext), ref(sks), ref(m_tmp[i]), ref(c_indexs[i]), ref(opt_attrs)));
     }
     cout << " " << threads.size() << " threads started." << endl;
+
+    element_t pair1, pair2, pair3, m;
+    element_init_GT(pair1, pairing);
+    element_init_GT(pair2, pairing);
+    element_init_GT(pair3, pairing);
+    element_init_GT(m, pairing);
+
+    element_pairing(pair1, ciphertext.c3, skl.sk3);
+    element_pairing(pair2, ciphertext.c4, skl.sk2);
+    element_pairing(pair3, ciphertext.c2, skl.sk1);
+    element_mul(m, ciphertext.c1, pair1);
+    element_mul(m, m, pair2);
+    element_div(m, m, pair3);
+
     for (int i = 0; i < thread_n; i++)
     {
         threads[i].join();
+        element_mul(m_tmp[i], m_tmp[i], m);
         element_to_mpz(message_mpz, m_tmp[i]);
         valueToMessage(dec_m, message_mpz);
         element_clear(m_tmp[i]);
