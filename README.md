@@ -3,8 +3,8 @@ This ABE is based on pbc library.
 
 [How to use] \
 // exec1.sh -> dabe \
-// exec2.sh -> abe with option \
-// exec3.sh -> dabe with option \
+// exec2.sh -> dabe with option \
+// exec3.sh -> abe with option \
 // exec.sh -> all
 
 // Using docker \
