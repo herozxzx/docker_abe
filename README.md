@@ -1,9 +1,10 @@
 # docker_abe
-ABE based on pbc library.
+This ABE is based on pbc library.
 
 [How to use] \
 // exec1.sh -> dabe \
-// exec2.sh -> dabe with option \
+// exec2.sh -> abe with option \
+// exec3.sh -> dabe with option \
 // exec.sh -> all
 
 // Using docker \
@@ -16,4 +17,4 @@ docker-compose up -d --build \
 // ex) Execute exec.sh \
 docker exec docker_abe-pbc-1 /pbc/exec.sh > output.txt 
 
-(If an error occured, try changing the newline of shell file to LF)
+(If an error occurs, try changing the newline of shell file to LF)
