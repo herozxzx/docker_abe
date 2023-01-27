@@ -2,8 +2,6 @@
 This ABE is based on pbc library.
 
 [How to use] \
-// test_all.sh
-
 // Using docker \
 docker image build -t docker_abe . \
 // ex) Execute exec.sh \
