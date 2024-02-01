@@ -2,8 +2,8 @@
 
 3 models are implemented.
 
-1. DABE (Distributed Attribute-based Encryption) \
-2. CP-ABE with multiple specified attribute \
+1. DABE (Distributed Attribute-based Encryption)
+2. CP-ABE with multiple specified attribute
 3. DABE with multiple specified attribute 
 
 These ABEs are based on pbc library.
