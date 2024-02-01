@@ -9,7 +9,8 @@
 These ABEs are based on pbc library.
 
 
-[How to use] \
+[How to use]
+
 1. Using docker (ex) Executing test_all.sh \
 　docker image build -t docker_abe . \
 　docker run --rm docker_abe /pbc/test_all.sh
